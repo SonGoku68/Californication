@@ -1,0 +1,67 @@
+format_version: "8"
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+project_type: ios
+app:
+  envs:
+  - BITRISE_PROJECT_PATH: Californication.xcworkspace
+  - BITRISE_SCHEME: Californication
+  - BITRISE_EXPORT_METHOD: development
+trigger_map:
+- push_branch: '*'
+  workflow: primary
+- pull_request_source_branch: '*'
+  workflow: primary
+workflows:
+  deploy:
+    steps:
+    - activate-ssh-key@4.0.3:
+        run_if: '{{getenv "SSH_RSA_PRIVATE_KEY" | ne ""}}'
+    - git-clone@4.0.14: {}
+    - cache-pull@2.0.1: {}
+    - script@1.1.5:
+        title: Do anything with Script step
+    - certificate-and-profile-installer@1.10.1: {}
+    - xcode-test@2.2.0:
+        inputs:
+        - project_path: $BITRISE_PROJECT_PATH
+        - scheme: $BITRISE_SCHEME
+    - xcode-archive@2.4.21:
+        inputs:
+        - project_path: $BITRISE_PROJECT_PATH
+        - scheme: $BITRISE_SCHEME
+        - export_method: $BITRISE_EXPORT_METHOD
+    - deploy-to-bitrise-io@1.3.19: {}
+    - cache-push@2.1.1: {}
+  primary:
+    steps:
+    - activate-ssh-key@4.0.3:
+        run_if: '{{getenv "SSH_RSA_PRIVATE_KEY" | ne ""}}'
+    - git-clone@4.0.14: {}
+    - cache-pull@2.0.1: {}
+    - certificate-and-profile-installer@1.10.1: {}
+    - xcode-test@2.2.0:
+        inputs:
+        - project_path: $BITRISE_PROJECT_PATH
+        - scheme: $BITRISE_SCHEME
+    - script@1.1.5:
+        title: Do anything with Script step
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            build-wrapper-macosx-x86 --out-dir build_wrapper_output_directory xcodebuild -project Californication/Californication.xcworkspace/ -scheme Californication -derivedDataPath Build/ -destination 'platform=iOS Simulator,name=iPhone 6,OS=12.1' -enableCodeCoverage YES clean build test CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+            bash xccov-to-sonarqube-generic.sh Build/Logs/Test/*.xcresult/*_Test/*.xccovarchive/ > sonarqube-generic-coverage.xml
+            sonar-scanner -Dsonar.projectKey=Californication -Dsonar.sources=. -Dsonar.swift.coverage.reportPath=sonarqube-generic-coverage.xml -Dsonar.cfamily.build-wrapper-output.bypass=true
+    - sonarqube-scanner:
+    - deploy-to-bitrise-io@1.3.19: {}
+    - cache-push@2.1.1: {}
+app:
+  envs:
+  - opts:
+      is_expand: false
+    BITRISE_PROJECT_PATH: Californication/Californication.xcworkspace
+  - opts:
+      is_expand: false
+    BITRISE_SCHEME: Californication
+  - opts:
+      is_expand: false
+    BITRISE_EXPORT_METHOD: development
